@@ -505,42 +505,6 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
         ))}
       </div>
 
-      {Object.keys(sessionsByDate).length === 0 && (
-        <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, fontStyle: "italic" }}>No sessions logged yet.</p>
-      )}
-
-      {Object.entries(sessionsByDate).map(([date, sessions]) => (
-        <div key={date} style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.iron, marginBottom: 8 }}>
-            {fmtDateLabel(date)}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {sessions.map((s) => (
-              <div key={s.id} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, color: COLORS.chalk }}>{s.exercise}</div>
-                    {s.day && (
-                      <span style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, color: COLORS.plate }}>{s.day}</span>
-                    )}
-                  </div>
-                  <button onClick={() => deleteSession(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.iron }}>
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                  {s.sets.map((set, i) => (
-                    <span key={i} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim, background: COLORS.surfaceRaised, borderRadius: 4, padding: "2px 8px" }}>
-                      {set.reps}×{set.weight}kg
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-
       {showLog && (
         <Modal onClose={() => { setShowLog(false); setLogDay(""); }} title="Log a set">
           <FieldRow label="Day">
