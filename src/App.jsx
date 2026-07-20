@@ -123,7 +123,7 @@ async function saveKeyForUser(userId, key, value) {
 const DEFAULT_PROFILE_DATA = {
   height: "",
   weightLog: [], // [{date, weight}]
-  benchmarks: [], // [{exercise, oneRM, twoRM}]
+  benchmarks: [], // [{exercise, oneRM, twoRM, threeRM}]
 };
 
 const DEFAULT_MACRO_DATA = {
@@ -1230,6 +1230,7 @@ function ProfileFields({ data, editable, onChangeHeight, onAddWeight, onAddBench
   const [newExercise, setNewExercise] = useState("");
   const [newOneRM, setNewOneRM] = useState("");
   const [newTwoRM, setNewTwoRM] = useState("");
+  const [newThreeRM, setNewThreeRM] = useState("");
 
   const chartData = data.weightLog.map((w) => ({ ...w, label: fmtShort(w.date) }));
   const currentWeight = data.weightLog[data.weightLog.length - 1]?.weight;
@@ -1242,10 +1243,11 @@ function ProfileFields({ data, editable, onChangeHeight, onAddWeight, onAddBench
   }
   function submitBenchmark() {
     if (!newExercise.trim()) return;
-    onAddBenchmark({ exercise: newExercise.trim(), oneRM: Number(newOneRM) || 0, twoRM: Number(newTwoRM) || 0 });
+    onAddBenchmark({ exercise: newExercise.trim(), oneRM: Number(newOneRM) || 0, twoRM: Number(newTwoRM) || 0, threeRM: Number(newThreeRM) || 0 });
     setNewExercise("");
     setNewOneRM("");
     setNewTwoRM("");
+    setNewThreeRM("");
   }
 
   return (
@@ -1316,27 +1318,31 @@ function ProfileFields({ data, editable, onChangeHeight, onAddWeight, onAddBench
         {data.benchmarks.length === 0 && (
           <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, fontStyle: "italic", margin: "0 0 8px" }}>No benchmarks yet.</p>
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: editable ? 12 : 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: editable ? 14 : 0 }}>
           {data.benchmarks.map((b, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.surfaceRaised, borderRadius: 6, padding: "8px 10px" }}>
-              <span style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 600, color: COLORS.chalk }}>{b.exercise}</span>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>1RM {b.oneRM}kg</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>2RM {b.twoRM}kg</span>
+            <div key={i} style={{ background: COLORS.surfaceRaised, borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 600, color: COLORS.chalk }}>{b.exercise}</span>
                 {editable && (
                   <span onClick={() => onRemoveBenchmark(i)} style={{ color: COLORS.iron, cursor: "pointer" }}><X size={13} /></span>
                 )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>1RM: {b.oneRM}kg</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>2RM: {b.twoRM}kg</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>3RM: {b.threeRM ?? 0}kg</span>
               </div>
             </div>
           ))}
         </div>
         {editable && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <input value={newExercise} onChange={(e) => setNewExercise(e.target.value)} placeholder="Exercise" style={{ flex: 2, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
-            <input value={newOneRM} onChange={(e) => setNewOneRM(e.target.value.replace(/\D/g, ""))} placeholder="1RM" style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
-            <input value={newTwoRM} onChange={(e) => setNewTwoRM(e.target.value.replace(/\D/g, ""))} placeholder="2RM" style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
-            <button onClick={submitBenchmark} style={{ background: COLORS.plateDim, border: "none", borderRadius: 6, padding: "0 10px", color: COLORS.chalk, cursor: "pointer" }}>
-              <Plus size={14} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input value={newExercise} onChange={(e) => setNewExercise(e.target.value)} placeholder="Exercise" style={{ width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "10px 10px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13, boxSizing: "border-box" }} />
+            <input value={newOneRM} onChange={(e) => setNewOneRM(e.target.value.replace(/\D/g, ""))} placeholder="1RM (kg)" style={{ width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "10px 10px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13, boxSizing: "border-box" }} />
+            <input value={newTwoRM} onChange={(e) => setNewTwoRM(e.target.value.replace(/\D/g, ""))} placeholder="2RM (kg)" style={{ width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "10px 10px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13, boxSizing: "border-box" }} />
+            <input value={newThreeRM} onChange={(e) => setNewThreeRM(e.target.value.replace(/\D/g, ""))} placeholder="3RM (kg)" style={{ width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "10px 10px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13, boxSizing: "border-box" }} />
+            <button onClick={submitBenchmark} style={{ width: "100%", background: COLORS.plateDim, border: "none", borderRadius: 6, padding: "10px 0", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              + Add benchmark
             </button>
           </div>
         )}
