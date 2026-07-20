@@ -875,6 +875,10 @@ function AuthScreen({ onAuthed }) {
   async function submit() {
     const trimmedName = name.trim();
     if (!trimmedName || !password) return;
+    if (password.length < 6) {
+      setError("Password needs to be at least 6 digits.");
+      return;
+    }
     setBusy(true);
     setError("");
     const email = nameToEmail(trimmedName);
@@ -929,10 +933,12 @@ function AuthScreen({ onAuthed }) {
         />
         <input
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          placeholder="Password"
+          placeholder="Password (numbers only)"
           type="password"
+          inputMode="numeric"
+          pattern="[0-9]*"
           style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "12px 14px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 14 }}
         />
       </div>
