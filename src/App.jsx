@@ -86,7 +86,7 @@ async function loadKey(key, fallback) {
 }
 async function saveKey(key, value) {
   try {
-    const { error } = await supabase.from("app_data").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+    const { error } = await supabase.from("app_data").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" });
     if (error) console.error("Storage save failed", key, error);
   } catch (e) {
     console.error("Storage save failed", key, e);
