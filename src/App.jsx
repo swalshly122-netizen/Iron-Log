@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus, MessageSquare, Search, Send, Users } from "lucide-react";
+import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus, MessageSquare, Search, Send, Users, Ruler, Scale, Trophy } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
 
@@ -92,6 +92,39 @@ async function saveKey(key, value) {
     console.error("Storage save failed", key, e);
   }
 }
+
+// Explicit-user versions: used by a coach reading/writing a specific client's
+// profile-data. Passing user_id explicitly overrides the column's default
+// (which otherwise resolves to whoever is currently signed in).
+async function loadKeyForUser(userId, key, fallback) {
+  try {
+    const { data, error } = await supabase.from("app_data").select("value").eq("key", key).eq("user_id", userId).maybeSingle();
+    if (error || !data) return fallback;
+    return data.value;
+  } catch (e) {
+    console.error("Storage load failed", key, e);
+    return fallback;
+  }
+}
+async function saveKeyForUser(userId, key, value) {
+  try {
+    const { error } = await supabase.from("app_data").upsert(
+      { user_id: userId, key, value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    );
+    if (error) console.error("Storage save failed", key, error);
+    return !error;
+  } catch (e) {
+    console.error("Storage save failed", key, e);
+    return false;
+  }
+}
+
+const DEFAULT_PROFILE_DATA = {
+  height: "",
+  weightLog: [], // [{date, weight}]
+  benchmarks: [], // [{exercise, oneRM, twoRM}]
+};
 
 const DEFAULT_MACRO_DATA = {
   targets: { calories: 2400, protein: 160, carbs: 260, fat: 70 },
@@ -917,6 +950,8 @@ function CoachTab({ userId }) {
   const [clientComments, setClientComments] = useState([]);
   const [draft, setDraft] = useState("");
   const [savingComment, setSavingComment] = useState(false);
+  const [clientProfile, setClientProfile] = useState(DEFAULT_PROFILE_DATA);
+  const [clientProfileLoaded, setClientProfileLoaded] = useState(false);
 
   useEffect(() => {
     loadMyComments();
@@ -975,6 +1010,28 @@ function CoachTab({ userId }) {
     setClientComments(rows);
     const current = rows.find((r) => r.week_start === thisWeek);
     setDraft(current ? current.comment : "");
+
+    setClientProfileLoaded(false);
+    const profile = await loadKeyForUser(c.id, "profile-data", DEFAULT_PROFILE_DATA);
+    setClientProfile(profile);
+    setClientProfileLoaded(true);
+  }
+
+  async function updateClientProfile(next) {
+    setClientProfile(next);
+    if (selectedClient) await saveKeyForUser(selectedClient.id, "profile-data", next);
+  }
+  function setClientHeight(v) {
+    updateClientProfile({ ...clientProfile, height: v });
+  }
+  function addClientWeight(v) {
+    updateClientProfile({ ...clientProfile, weightLog: [...clientProfile.weightLog, { date: todayStr(), weight: v }] });
+  }
+  function addClientBenchmark(b) {
+    updateClientProfile({ ...clientProfile, benchmarks: [...clientProfile.benchmarks, b] });
+  }
+  function removeClientBenchmark(i) {
+    updateClientProfile({ ...clientProfile, benchmarks: clientProfile.benchmarks.filter((_, idx) => idx !== i) });
   }
 
   async function saveComment() {
@@ -1106,6 +1163,28 @@ function CoachTab({ userId }) {
             <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 0.5, color: COLORS.chalk, marginBottom: 4 }}>
               {selectedClient.display_name.toUpperCase()}
             </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 10px" }}>
+                Profile
+              </h3>
+              {!clientProfileLoaded ? (
+                <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron }}>Loading…</p>
+              ) : (
+                <ProfileFields
+                  data={clientProfile}
+                  editable={true}
+                  onChangeHeight={setClientHeight}
+                  onAddWeight={addClientWeight}
+                  onAddBenchmark={addClientBenchmark}
+                  onRemoveBenchmark={removeClientBenchmark}
+                />
+              )}
+            </div>
+
+            <h3 style={{ fontFamily: "Inter", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 10px" }}>
+              Weekly comment
+            </h3>
             <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, margin: "0 0 14px" }}>Week of {weekRangeLabel(thisWeek)}</p>
 
             <textarea
@@ -1141,6 +1220,157 @@ function CoachTab({ userId }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------- Profile fields (shared: read-only for client, editable for coach) ----------
+function ProfileFields({ data, editable, onChangeHeight, onAddWeight, onAddBenchmark, onRemoveBenchmark }) {
+  const [newWeight, setNewWeight] = useState("");
+  const [newExercise, setNewExercise] = useState("");
+  const [newOneRM, setNewOneRM] = useState("");
+  const [newTwoRM, setNewTwoRM] = useState("");
+
+  const chartData = data.weightLog.map((w) => ({ ...w, label: fmtShort(w.date) }));
+  const currentWeight = data.weightLog[data.weightLog.length - 1]?.weight;
+
+  function submitWeight() {
+    const v = Number(newWeight);
+    if (!v) return;
+    onAddWeight(v);
+    setNewWeight("");
+  }
+  function submitBenchmark() {
+    if (!newExercise.trim()) return;
+    onAddBenchmark({ exercise: newExercise.trim(), oneRM: Number(newOneRM) || 0, twoRM: Number(newTwoRM) || 0 });
+    setNewExercise("");
+    setNewOneRM("");
+    setNewTwoRM("");
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <div style={{ flex: 1, background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <Ruler size={14} color={COLORS.chalkDim} />
+            <span style={{ fontFamily: "Inter", fontSize: 11, fontWeight: 700, color: COLORS.iron, textTransform: "uppercase" }}>Height</span>
+          </div>
+          {editable ? (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+              <input
+                value={data.height}
+                onChange={(e) => onChangeHeight(e.target.value.replace(/\D/g, ""))}
+                style={{ width: 50, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "6px 8px", color: COLORS.chalk, fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 700 }}
+              />
+              <span style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron }}>cm</span>
+            </div>
+          ) : (
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, fontWeight: 700, color: COLORS.chalk }}>{data.height || "–"} cm</span>
+          )}
+        </div>
+        <div style={{ flex: 1, background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <Scale size={14} color={COLORS.chalkDim} />
+            <span style={{ fontFamily: "Inter", fontSize: 11, fontWeight: 700, color: COLORS.iron, textTransform: "uppercase" }}>Weight</span>
+          </div>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, fontWeight: 700, color: COLORS.chalk }}>{currentWeight ?? "–"} kg</span>
+        </div>
+      </div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: "16px 8px 8px", marginBottom: 16 }}>
+        <div style={{ padding: "0 10px 10px", fontFamily: "Inter", fontSize: 12, color: COLORS.iron, textTransform: "uppercase", letterSpacing: 0.5 }}>Weight over time</div>
+        {chartData.length === 0 ? (
+          <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, fontStyle: "italic", padding: "0 10px 10px" }}>No weight logged yet.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={chartData} margin={{ top: 5, right: 16, bottom: 0, left: -20 }}>
+              <CartesianGrid stroke={COLORS.line} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fill: COLORS.iron, fontSize: 10, fontFamily: "Inter" }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
+              <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fill: COLORS.iron, fontSize: 10, fontFamily: "Inter" }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
+              <Tooltip contentStyle={{ background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`, borderRadius: 6, fontFamily: "Inter", fontSize: 12 }} labelStyle={{ color: COLORS.chalk }} itemStyle={{ color: COLORS.plate }} />
+              <Line type="monotone" dataKey="weight" stroke={COLORS.plate} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.plate }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+        {editable && (
+          <div style={{ display: "flex", gap: 6, padding: "10px 10px 6px" }}>
+            <input
+              value={newWeight}
+              onChange={(e) => setNewWeight(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="Log today's weight (kg)"
+              style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 10px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13 }}
+            />
+            <button onClick={submitWeight} style={{ background: COLORS.plateDim, border: "none", borderRadius: 6, padding: "0 12px", color: COLORS.chalk, cursor: "pointer" }}>
+              <Plus size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <Trophy size={16} color={COLORS.gold} />
+          <span style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 700, color: COLORS.chalkDim, textTransform: "uppercase", letterSpacing: 0.5 }}>Strength benchmarks</span>
+        </div>
+        {data.benchmarks.length === 0 && (
+          <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, fontStyle: "italic", margin: "0 0 8px" }}>No benchmarks yet.</p>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: editable ? 12 : 0 }}>
+          {data.benchmarks.map((b, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.surfaceRaised, borderRadius: 6, padding: "8px 10px" }}>
+              <span style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 600, color: COLORS.chalk }}>{b.exercise}</span>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>1RM {b.oneRM}kg</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim }}>2RM {b.twoRM}kg</span>
+                {editable && (
+                  <span onClick={() => onRemoveBenchmark(i)} style={{ color: COLORS.iron, cursor: "pointer" }}><X size={13} /></span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {editable && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={newExercise} onChange={(e) => setNewExercise(e.target.value)} placeholder="Exercise" style={{ flex: 2, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
+            <input value={newOneRM} onChange={(e) => setNewOneRM(e.target.value.replace(/\D/g, ""))} placeholder="1RM" style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
+            <input value={newTwoRM} onChange={(e) => setNewTwoRM(e.target.value.replace(/\D/g, ""))} placeholder="2RM" style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "8px 8px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 12 }} />
+            <button onClick={submitBenchmark} style={{ background: COLORS.plateDim, border: "none", borderRadius: 6, padding: "0 10px", color: COLORS.chalk, cursor: "pointer" }}>
+              <Plus size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Profile Tab (client's own read-only view) ----------
+function ProfileTab({ userId }) {
+  const [profileData, setProfileData] = useState(DEFAULT_PROFILE_DATA);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const data = await loadKeyForUser(userId, "profile-data", DEFAULT_PROFILE_DATA);
+      setProfileData(data);
+      setLoaded(true);
+    })();
+  }, [userId]);
+
+  return (
+    <div style={{ padding: "16px 16px 90px" }}>
+      <h2 style={{ fontFamily: "'Bebas Neue'", fontSize: 30, letterSpacing: 1, color: COLORS.chalk, margin: "0 0 4px" }}>
+        PROFILE
+      </h2>
+      <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, margin: "0 0 18px" }}>
+        Your coach updates these after check-ins
+      </p>
+      {!loaded ? (
+        <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron }}>Loading…</p>
+      ) : (
+        <ProfileFields data={profileData} editable={false} />
+      )}
     </div>
   );
 }
@@ -1475,6 +1705,7 @@ export default function App() {
     { id: "progress", label: "Progress", icon: TrendingUp },
     { id: "review", label: "Review", icon: Calendar },
     { id: "coaching", label: "Coaching", icon: Users },
+    { id: "profile", label: "Profile", icon: Ruler },
   ];
 
   return (
@@ -1518,6 +1749,7 @@ export default function App() {
             {tab === "progress" && <ProgressTab workoutData={workoutData} />}
             {tab === "review" && <ReviewTab macroData={macroData} workoutData={workoutData} />}
             {tab === "coaching" && <CoachTab userId={session.user.id} />}
+            {tab === "profile" && <ProfileTab userId={session.user.id} />}
           </div>
 
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.surfaceRaised, borderTop: `1px solid ${COLORS.line}`, display: "flex", justifyContent: "center" }}>
