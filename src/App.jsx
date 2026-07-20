@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus } from "lucide-react";
+import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus, MessageSquare, Search, Send, Users } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
 
@@ -46,6 +46,13 @@ function getWeekDates(offset = 0) {
 function fmtShort(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function weekRangeLabel(mondayIso) {
+  const start = new Date(mondayIso + "T00:00:00");
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return `${fmtShort(mondayIso)} – ${fmtShort(end.toISOString().slice(0, 10))}`;
 }
 
 function dayMacros(logs, date) {
@@ -820,6 +827,252 @@ function ReviewTab({ macroData, workoutData }) {
   );
 }
 
+// ---------- Coaching Tab ----------
+function CoachTab({ userId }) {
+  const thisWeek = useMemo(() => getWeekDates()[0], []);
+
+  const [myComments, setMyComments] = useState([]);
+  const [myCommentsLoaded, setMyCommentsLoaded] = useState(false);
+
+  const [clients, setClients] = useState([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [addError, setAddError] = useState("");
+
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientComments, setClientComments] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
+
+  useEffect(() => {
+    loadMyComments();
+    loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadMyComments() {
+    const { data } = await supabase
+      .from("weekly_comments")
+      .select("week_start, comment")
+      .eq("client_id", userId)
+      .order("week_start", { ascending: false });
+    setMyComments(data || []);
+    setMyCommentsLoaded(true);
+  }
+
+  async function loadClients() {
+    const { data: links } = await supabase.from("client_links").select("client_id").eq("coach_id", userId);
+    const ids = (links || []).map((l) => l.client_id);
+    if (ids.length === 0) {
+      setClients([]);
+      setClientsLoaded(true);
+      return;
+    }
+    const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", ids);
+    setClients(profiles || []);
+    setClientsLoaded(true);
+  }
+
+  async function runSearch() {
+    const q = search.trim();
+    if (!q) { setSearchResults([]); return; }
+    setSearching(true);
+    const { data } = await supabase.from("profiles").select("id, display_name").ilike("display_name", `%${q}%`).neq("id", userId).limit(8);
+    setSearchResults(data || []);
+    setSearching(false);
+  }
+
+  async function addClient(p) {
+    setAddError("");
+    const { error } = await supabase.from("client_links").insert({ coach_id: userId, client_id: p.id });
+    if (error) {
+      setAddError(error.message.toLowerCase().includes("duplicate") ? `${p.display_name} is already one of your clients.` : error.message);
+      return;
+    }
+    setSearch("");
+    setSearchResults([]);
+    loadClients();
+  }
+
+  async function openClient(c) {
+    setSelectedClient(c);
+    const { data } = await supabase.from("weekly_comments").select("week_start, comment").eq("client_id", c.id).order("week_start", { ascending: false });
+    const rows = data || [];
+    setClientComments(rows);
+    const current = rows.find((r) => r.week_start === thisWeek);
+    setDraft(current ? current.comment : "");
+  }
+
+  async function saveComment() {
+    if (!selectedClient) return;
+    setSavingComment(true);
+    await supabase.from("weekly_comments").upsert(
+      { client_id: selectedClient.id, coach_id: userId, week_start: thisWeek, comment: draft, updated_at: new Date().toISOString() },
+      { onConflict: "client_id,week_start" }
+    );
+    await openClient(selectedClient);
+    setSavingComment(false);
+  }
+
+  const myThisWeek = myComments.find((c) => c.week_start === thisWeek);
+  const myPastWeeks = myComments.filter((c) => c.week_start !== thisWeek);
+
+  return (
+    <div style={{ padding: "16px 16px 90px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <MessageSquare size={22} color={COLORS.plate} />
+        <h2 style={{ fontFamily: "'Bebas Neue'", fontSize: 30, letterSpacing: 1, color: COLORS.chalk, margin: 0 }}>
+          COACHING
+        </h2>
+      </div>
+
+      {/* Comments left for you */}
+      <div style={{ margin: "18px 0" }}>
+        <h3 style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 10px" }}>
+          Comments for you
+        </h3>
+        {!myCommentsLoaded ? (
+          <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron }}>Loading…</p>
+        ) : (
+          <>
+            <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.gold}`, borderRadius: 10, padding: "12px 14px", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: COLORS.iron }}>{weekRangeLabel(thisWeek)}</span>
+                <span style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 700, color: COLORS.gold, textTransform: "uppercase", letterSpacing: 0.5 }}>This week</span>
+              </div>
+              <p style={{ fontFamily: "Inter", fontSize: 13, color: myThisWeek ? COLORS.chalk : COLORS.iron, fontStyle: myThisWeek ? "normal" : "italic", margin: 0 }}>
+                {myThisWeek ? myThisWeek.comment : "No comment yet from your coach."}
+              </p>
+            </div>
+            {myPastWeeks.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {myPastWeeks.map((c) => (
+                  <div key={c.week_start} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: COLORS.iron, marginBottom: 4 }}>{weekRangeLabel(c.week_start)}</div>
+                    <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.chalkDim, margin: 0 }}>{c.comment}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Your clients */}
+      <div>
+        <h3 style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 10px" }}>
+          Your clients
+        </h3>
+
+        {!selectedClient && (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+                placeholder="Search by name to add a client"
+                style={{ flex: 1, background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 13 }}
+              />
+              <button onClick={runSearch} style={{ background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "0 14px", color: COLORS.chalk, cursor: "pointer" }}>
+                <Search size={16} />
+              </button>
+            </div>
+
+            {addError && <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.plate, marginTop: 0 }}>{addError}</p>}
+
+            {searchResults.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                {searchResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addClient(p)}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}
+                  >
+                    <span style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.chalk }}>{p.display_name}</span>
+                    <span style={{ fontFamily: "Inter", fontSize: 11, color: COLORS.gold }}>+ Add</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!clientsLoaded ? (
+              <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron }}>Loading…</p>
+            ) : clients.length === 0 ? (
+              <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, fontStyle: "italic" }}>No clients added yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {clients.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => openClient(c)}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <User size={16} color={COLORS.chalkDim} />
+                      <span style={{ fontFamily: "Inter", fontSize: 14, fontWeight: 600, color: COLORS.chalk }}>{c.display_name}</span>
+                    </div>
+                    <ChevronRight size={16} color={COLORS.iron} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedClient && (
+          <div>
+            <button
+              onClick={() => setSelectedClient(null)}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.iron, fontFamily: "Inter", fontSize: 12, cursor: "pointer", marginBottom: 14 }}
+            >
+              <ChevronLeft size={14} /> All clients
+            </button>
+
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 0.5, color: COLORS.chalk, marginBottom: 4 }}>
+              {selectedClient.display_name.toUpperCase()}
+            </div>
+            <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, margin: "0 0 14px" }}>Week of {weekRangeLabel(thisWeek)}</p>
+
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Leave feedback on this week's check-in…"
+              rows={5}
+              style={{ width: "100%", background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 14, resize: "vertical", boxSizing: "border-box", marginBottom: 10 }}
+            />
+            <button
+              onClick={saveComment}
+              disabled={savingComment}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: COLORS.plate, color: COLORS.chalk, border: "none", borderRadius: 8, padding: "10px", fontFamily: "Inter", fontWeight: 700, fontSize: 13, cursor: savingComment ? "default" : "pointer", opacity: savingComment ? 0.7 : 1, marginBottom: 22 }}
+            >
+              <Send size={14} /> {savingComment ? "Saving…" : "Save comment"}
+            </button>
+
+            <div style={{ fontFamily: "Inter", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.iron, marginBottom: 8 }}>
+              Past weeks
+            </div>
+            {clientComments.filter((c) => c.week_start !== thisWeek).length === 0 ? (
+              <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, fontStyle: "italic" }}>No earlier comments yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {clientComments.filter((c) => c.week_start !== thisWeek).map((c) => (
+                  <div key={c.week_start} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: COLORS.iron, marginBottom: 4 }}>{weekRangeLabel(c.week_start)}</div>
+                    <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.chalkDim, margin: 0 }}>{c.comment}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Shared UI bits ----------
 function Modal({ title, children, onClose }) {
   return (
@@ -1116,6 +1369,8 @@ export default function App() {
     if (!session) { setDataLoaded(false); return; }
     (async () => {
       setDataLoaded(false);
+      const displayName = session.user.user_metadata?.display_name || "";
+      await supabase.from("profiles").upsert({ id: session.user.id, display_name: displayName }, { onConflict: "id" });
       const [m, w] = await Promise.all([
         loadKey("macro-data", DEFAULT_MACRO_DATA),
         loadKey("workout-data", DEFAULT_WORKOUT_DATA),
@@ -1141,6 +1396,7 @@ export default function App() {
     { id: "workouts", label: "Workouts", icon: Dumbbell },
     { id: "progress", label: "Progress", icon: TrendingUp },
     { id: "review", label: "Review", icon: Calendar },
+    { id: "coaching", label: "Coaching", icon: Users },
   ];
 
   return (
@@ -1183,6 +1439,7 @@ export default function App() {
             {tab === "workouts" && <WorkoutsTab workoutData={workoutData} setWorkoutData={setWorkoutData} />}
             {tab === "progress" && <ProgressTab workoutData={workoutData} />}
             {tab === "review" && <ReviewTab macroData={macroData} workoutData={workoutData} />}
+            {tab === "coaching" && <CoachTab userId={session.user.id} />}
           </div>
 
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: COLORS.surfaceRaised, borderTop: `1px solid ${COLORS.line}`, display: "flex", justifyContent: "center" }}>
