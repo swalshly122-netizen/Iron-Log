@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut } from "lucide-react";
+import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
 
@@ -865,20 +865,71 @@ function nameToEmail(name) {
   return `${slug}@ironlog.app`;
 }
 
+const PIN_LENGTH = 6;
+
+function PinPad({ onDigit, onBackspace, disabled }) {
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, width: "100%", maxWidth: 280, margin: "0 auto" }}>
+      {keys.map((k, i) => {
+        if (k === "") return <div key={i} />;
+        if (k === "back") {
+          return (
+            <button
+              key={i}
+              onClick={onBackspace}
+              disabled={disabled}
+              style={{ aspectRatio: "1", borderRadius: "50%", border: `1px solid ${COLORS.line}`, background: COLORS.surface, color: COLORS.chalkDim, display: "flex", alignItems: "center", justifyContent: "center", cursor: disabled ? "default" : "pointer" }}
+            >
+              <Delete size={20} />
+            </button>
+          );
+        }
+        return (
+          <button
+            key={i}
+            onClick={() => onDigit(k)}
+            disabled={disabled}
+            style={{ aspectRatio: "1", borderRadius: "50%", border: `1px solid ${COLORS.line}`, background: COLORS.surface, color: COLORS.chalk, fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700, cursor: disabled ? "default" : "pointer" }}
+          >
+            {k}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PinDots({ length, filled, error }) {
+  return (
+    <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 30 }}>
+      {Array.from({ length }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            border: `1px solid ${error ? COLORS.plate : COLORS.line}`,
+            background: i < filled ? (error ? COLORS.plate : COLORS.gold) : "transparent",
+            transition: "background 0.15s ease",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function AuthScreen({ onAuthed }) {
+  const [step, setStep] = useState("name"); // "name" | "pin"
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function submit() {
+  async function submit(pinValue) {
     const trimmedName = name.trim();
-    if (!trimmedName || !password) return;
-    if (password.length < 6) {
-      setError("Password needs to be at least 6 digits.");
-      return;
-    }
     setBusy(true);
     setError("");
     const email = nameToEmail(trimmedName);
@@ -886,23 +937,26 @@ function AuthScreen({ onAuthed }) {
     if (mode === "signup") {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
-        password,
+        password: pinValue,
         options: { data: { display_name: trimmedName } },
       });
       if (signUpError) {
         setError(signUpError.message.includes("already registered") ? "That name is taken. Try logging in instead." : signUpError.message);
+        setPin("");
         setBusy(false);
         return;
       }
       if (data.session) onAuthed(data.session);
       else {
-        setError("Account created. If sign-in doesn't continue automatically, log in below.");
+        setError("Account created. Log in with your PIN.");
         setMode("login");
+        setPin("");
       }
     } else {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password: pinValue });
       if (signInError) {
-        setError("Wrong name or password.");
+        setError("Wrong name or PIN.");
+        setPin("");
         setBusy(false);
         return;
       }
@@ -911,56 +965,101 @@ function AuthScreen({ onAuthed }) {
     setBusy(false);
   }
 
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
-      <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <Dumbbell size={30} color={COLORS.plate} style={{ marginBottom: 8 }} />
-        <h1 style={{ fontFamily: "'Bebas Neue'", fontSize: 34, letterSpacing: 1, color: COLORS.chalk, margin: 0 }}>
-          IRON LOG
-        </h1>
-        <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, margin: "4px 0 0" }}>
-          {mode === "login" ? "Log in to see your own macros, workouts, and progress." : "Create an account to get started."}
-        </p>
-      </div>
+  useEffect(() => {
+    if (pin.length === PIN_LENGTH && step === "pin" && !busy) {
+      submit(pin);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin]);
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 6 }}>
+  function pressDigit(d) {
+    if (pin.length >= PIN_LENGTH || busy) return;
+    setError("");
+    setPin(pin + d);
+  }
+  function backspace() {
+    if (busy) return;
+    setPin(pin.slice(0, -1));
+  }
+  function goToPin() {
+    setPin("");
+    setError("");
+    setStep("pin");
+  }
+  function backToName() {
+    setStep("name");
+    setPin("");
+    setError("");
+  }
+
+  if (step === "name") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <Dumbbell size={30} color={COLORS.plate} style={{ marginBottom: 8 }} />
+          <h1 style={{ fontFamily: "'Bebas Neue'", fontSize: 34, letterSpacing: 1, color: COLORS.chalk, margin: 0 }}>
+            IRON LOG
+          </h1>
+          <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, margin: "4px 0 0" }}>
+            {mode === "login" ? "Log in to see your own macros, workouts, and progress." : "Create an account to get started."}
+          </p>
+        </div>
+
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) goToPin(); }}
           placeholder="Name"
           autoFocus
-          style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "12px 14px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 14 }}
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "12px 14px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 14, marginBottom: 12, outline: "none" }}
         />
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          placeholder="Password (numbers only)"
-          type="password"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "12px 14px", color: COLORS.chalk, fontFamily: "Inter", fontSize: 14 }}
-        />
+
+        <button
+          onClick={goToPin}
+          disabled={!name.trim()}
+          style={{ background: COLORS.plate, color: COLORS.chalk, border: "none", borderRadius: 8, padding: "12px", fontFamily: "Inter", fontWeight: 700, fontSize: 14, cursor: name.trim() ? "pointer" : "default", opacity: name.trim() ? 1 : 0.5, marginBottom: 12 }}
+        >
+          Continue
+        </button>
+
+        <button
+          onClick={() => setMode(mode === "login" ? "signup" : "login")}
+          style={{ background: "none", border: "none", color: COLORS.iron, fontFamily: "Inter", fontSize: 12, textDecoration: "underline", cursor: "pointer" }}
+        >
+          {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
+      <button
+        onClick={backToName}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.iron, fontFamily: "Inter", fontSize: 12, cursor: "pointer", marginBottom: 20, alignSelf: "flex-start" }}
+      >
+        <ArrowLeft size={14} /> Back
+      </button>
+
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <User size={22} color={COLORS.chalkDim} style={{ marginBottom: 6 }} />
+        <div style={{ fontFamily: "Inter", fontSize: 14, fontWeight: 600, color: COLORS.chalk }}>{name.trim()}</div>
+        <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.iron, margin: "6px 0 0" }}>
+          {mode === "login" ? "Enter your PIN" : `Choose a ${PIN_LENGTH}-digit PIN`}
+        </p>
       </div>
 
+      <PinDots length={PIN_LENGTH} filled={pin.length} error={!!error} />
+
       {error && (
-        <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.plate, marginTop: 0, marginBottom: 10 }}>{error}</p>
+        <p style={{ fontFamily: "Inter", fontSize: 12, color: COLORS.plate, textAlign: "center", marginTop: -18, marginBottom: 18 }}>{error}</p>
       )}
 
-      <button
-        onClick={submit}
-        disabled={busy}
-        style={{ background: COLORS.plate, color: COLORS.chalk, border: "none", borderRadius: 8, padding: "12px", fontFamily: "Inter", fontWeight: 700, fontSize: 14, cursor: busy ? "default" : "pointer", opacity: busy ? 0.7 : 1, marginBottom: 12 }}
-      >
-        {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
-      </button>
-
-      <button
-        onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}
-        style={{ background: "none", border: "none", color: COLORS.iron, fontFamily: "Inter", fontSize: 12, textDecoration: "underline", cursor: "pointer" }}
-      >
-        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
-      </button>
+      {busy ? (
+        <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, textAlign: "center" }}>Checking…</p>
+      ) : (
+        <PinPad onDigit={pressDigit} onBackspace={backspace} disabled={busy} />
+      )}
     </div>
   );
 }
