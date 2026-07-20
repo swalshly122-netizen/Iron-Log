@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
 
@@ -382,10 +382,37 @@ function DayPlanBox({ plan, onChange, onLogExercise }) {
   );
 }
 
+function Stepper({ label, value, onChange, step, min = 0 }) {
+  return (
+    <div style={{ flex: 1 }}>
+      <div style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.iron, marginBottom: 6, textAlign: "center" }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button
+          onClick={() => onChange(Math.max(min, Math.round((value - step) * 100) / 100))}
+          style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.line}`, background: COLORS.surface, color: COLORS.chalkDim, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+        >
+          <Minus size={14} />
+        </button>
+        <div style={{ flex: 1, textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 700, color: COLORS.chalk }}>
+          {value}
+        </div>
+        <button
+          onClick={() => onChange(Math.round((value + step) * 100) / 100)}
+          style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.line}`, background: COLORS.plateDim, color: COLORS.chalk, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WorkoutsTab({ workoutData, setWorkoutData }) {
   const [showLog, setShowLog] = useState(false);
   const [exercise, setExercise] = useState("");
-  const [sets, setSets] = useState([{ reps: "", weight: "" }]);
+  const [sets, setSets] = useState([{ reps: 5, weight: 0 }]);
   const [logDay, setLogDay] = useState("");
 
   const dayPlans = workoutData.dayPlans || DEFAULT_WORKOUT_DATA.dayPlans;
@@ -400,7 +427,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
   function openLogModal(plan, exerciseName) {
     setLogDay(plan ? plan.id : "");
     setExercise(exerciseName || "");
-    setSets([{ reps: "", weight: "" }]);
+    setSets([{ reps: 5, weight: 0 }]);
     setShowLog(true);
   }
 
@@ -416,7 +443,8 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
   }, [workoutData.sessions]);
 
   function addSetRow() {
-    setSets([...sets, { reps: "", weight: "" }]);
+    const last = sets[sets.length - 1] || { reps: 5, weight: 0 };
+    setSets([...sets, { reps: last.reps, weight: last.weight }]);
   }
   function updateSet(i, field, value) {
     const next = [...sets];
@@ -429,9 +457,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
 
   function saveSession() {
     if (!exercise.trim()) return;
-    const cleanSets = sets
-      .filter((s) => s.reps !== "" || s.weight !== "")
-      .map((s) => ({ reps: Number(s.reps) || 0, weight: Number(s.weight) || 0 }));
+    const cleanSets = sets.map((s) => ({ reps: s.reps, weight: s.weight }));
     if (cleanSets.length === 0) return;
     const plan = dayPlans.find((p) => p.id === logDay);
     const session = { id: Date.now().toString(), date: todayStr(), exercise: exercise.trim(), sets: cleanSets, day: plan ? plan.label : null };
@@ -443,7 +469,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
       exerciseNames: Array.from(names),
     });
     setExercise("");
-    setSets([{ reps: "", weight: "" }]);
+    setSets([{ reps: 5, weight: 0 }]);
     setLogDay("");
     setShowLog(false);
   }
@@ -498,7 +524,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                   {s.sets.map((set, i) => (
                     <span key={i} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim, background: COLORS.surfaceRaised, borderRadius: 4, padding: "2px 8px" }}>
-                      {set.reps}×{set.weight}
+                      {set.reps}×{set.weight}kg
                     </span>
                   ))}
                 </div>
@@ -532,20 +558,23 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
             Sets
           </div>
           {sets.map((s, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.iron, width: 16 }}>{i + 1}</div>
-              <TextInput value={s.reps} onChange={(v) => updateSet(i, "reps", v)} placeholder="reps" numeric small />
-              <span style={{ color: COLORS.iron, fontFamily: "Inter" }}>×</span>
-              <TextInput value={s.weight} onChange={(v) => updateSet(i, "weight", v)} placeholder="weight" numeric small />
-              {sets.length > 1 && (
-                <button onClick={() => removeSetRow(i)} style={{ background: "none", border: "none", color: COLORS.iron, cursor: "pointer" }}>
-                  <X size={15} />
-                </button>
-              )}
+            <div key={i} style={{ background: COLORS.bg, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: COLORS.iron }}>SET {i + 1}</span>
+                {sets.length > 1 && (
+                  <button onClick={() => removeSetRow(i)} style={{ background: "none", border: "none", color: COLORS.iron, cursor: "pointer" }}>
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <Stepper label="Reps" value={s.reps} onChange={(v) => updateSet(i, "reps", v)} step={1} />
+                <Stepper label="Weight (kg)" value={s.weight} onChange={(v) => updateSet(i, "weight", v)} step={2.5} />
+              </div>
             </div>
           ))}
-          <button onClick={addSetRow} style={{ background: "none", border: `1px dashed ${COLORS.line}`, color: COLORS.chalkDim, borderRadius: 6, padding: "6px 10px", fontFamily: "Inter", fontSize: 12, cursor: "pointer", marginBottom: 14 }}>
-            + add set
+          <button onClick={addSetRow} style={{ width: "100%", background: "none", border: `1px dashed ${COLORS.line}`, color: COLORS.chalkDim, borderRadius: 6, padding: "8px 10px", fontFamily: "Inter", fontSize: 12, cursor: "pointer", marginBottom: 14 }}>
+            + Add set (starts from last set's numbers)
           </button>
           <PrimaryButton onClick={saveSession} label="Save session" />
         </Modal>
