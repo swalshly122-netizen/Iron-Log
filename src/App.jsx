@@ -485,11 +485,28 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
     setWorkoutData({ ...workoutData, sessions: workoutData.sessions.filter((s) => s.id !== id) });
   }
 
+  const [progWeekOffset, setProgWeekOffset] = useState(0);
+  const progWeekDates = useMemo(() => getWeekDates(progWeekOffset), [progWeekOffset]);
+  const [selectedProgDate, setSelectedProgDate] = useState(() => {
+    const t = todayStr();
+    return progWeekDates.includes(t) ? t : progWeekDates[0];
+  });
+
+  function changeProgWeek(delta) {
+    const next = progWeekOffset + delta;
+    setProgWeekOffset(next);
+    const dates = getWeekDates(next);
+    setSelectedProgDate(dates.includes(todayStr()) ? todayStr() : dates[0]);
+  }
+
+  const isProgCurrentWeek = progWeekOffset === 0;
+  const daySessions = workoutData.sessions.filter((s) => s.date === selectedProgDate);
+
   return (
     <div style={{ padding: "16px 16px 90px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 20 }}>
         <h2 style={{ fontFamily: "'Bebas Neue'", fontSize: 30, letterSpacing: 1, color: COLORS.chalk, margin: 0 }}>
-          WORKOUT LOG
+          EXERCISE PROGRAMME
         </h2>
         <button
           onClick={() => openLogModal(null, "")}
@@ -504,6 +521,97 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
           <DayPlanBox key={plan.id} plan={plan} onChange={updateDayPlan} onLogExercise={openLogModal} />
         ))}
       </div>
+
+      <h3 style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 10px" }}>
+        Look back
+      </h3>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button onClick={() => changeProgWeek(-1)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: 8, color: COLORS.chalk, cursor: "pointer" }}>
+          <ChevronLeft size={18} />
+        </button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 700, color: COLORS.chalk }}>
+            {fmtShort(progWeekDates[0])} – {fmtShort(progWeekDates[6])}
+          </div>
+          <div style={{ fontFamily: "Inter", fontSize: 11, color: COLORS.iron }}>{isProgCurrentWeek ? "This week" : "Past week"}</div>
+        </div>
+        <button
+          onClick={() => changeProgWeek(1)}
+          disabled={isProgCurrentWeek}
+          style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: 8, color: isProgCurrentWeek ? COLORS.line : COLORS.chalk, cursor: isProgCurrentWeek ? "default" : "pointer" }}
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {progWeekDates.map((d, i) => {
+          const hasData = workoutData.sessions.some((s) => s.date === d);
+          const selected = d === selectedProgDate;
+          const isFuture = d > todayStr();
+          return (
+            <button
+              key={d}
+              onClick={() => setSelectedProgDate(d)}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                padding: "8px 2px",
+                background: selected ? COLORS.plateDim : COLORS.surface,
+                border: `1px solid ${selected ? COLORS.plate : COLORS.line}`,
+                borderRadius: 8,
+                cursor: "pointer",
+                opacity: isFuture ? 0.5 : 1,
+              }}
+            >
+              <span style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: selected ? COLORS.chalk : COLORS.iron, textTransform: "uppercase" }}>
+                {WEEKDAY_SHORT[i]}
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: selected ? COLORS.chalk : COLORS.chalkDim }}>
+                {new Date(d + "T00:00:00").getDate()}
+              </span>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: hasData ? COLORS.gold : COLORS.line }} />
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontFamily: "Inter", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.iron, marginBottom: 10 }}>
+        {fmtDateLabel(selectedProgDate)}
+      </div>
+
+      {daySessions.length === 0 ? (
+        <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, fontStyle: "italic" }}>Nothing logged this day.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {daySessions.map((s) => (
+            <div key={s.id} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, color: COLORS.chalk }}>{s.exercise}</div>
+                  {s.day && (
+                    <span style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, color: COLORS.plate }}>{s.day}</span>
+                  )}
+                </div>
+                <button onClick={() => deleteSession(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.iron }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {s.sets.map((set, i) => (
+                  <span key={i} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim, background: COLORS.surfaceRaised, borderRadius: 4, padding: "2px 8px" }}>
+                    {set.reps}×{set.weight}kg
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showLog && (
         <Modal onClose={() => { setShowLog(false); setLogDay(""); }} title="Log a set">
@@ -1346,6 +1454,12 @@ export default function App() {
   }, [session]);
 
   async function logout() {
+    if (dataLoaded) {
+      await Promise.all([
+        saveKey("macro-data", macroData),
+        saveKey("workout-data", workoutData),
+      ]);
+    }
     await supabase.auth.signOut();
     setTab("macros");
   }
@@ -1357,7 +1471,7 @@ export default function App() {
 
   const tabs = [
     { id: "macros", label: "Macros", icon: Flame },
-    { id: "workouts", label: "Workouts", icon: Dumbbell },
+    { id: "workouts", label: "Programme", icon: Dumbbell },
     { id: "progress", label: "Progress", icon: TrendingUp },
     { id: "review", label: "Review", icon: Calendar },
     { id: "coaching", label: "Coaching", icon: Users },
