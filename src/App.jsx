@@ -132,6 +132,7 @@ const DEFAULT_MACRO_DATA = {
   targets: { calories: 2400, protein: 160, carbs: 260, fat: 70 },
   logs: {}, // date -> [{id, name, calories, protein, carbs, fat}]
   ratings: {}, // date -> 1-10 how the day/session felt
+  wellness: {}, // date -> {fatigue, tiredness, enjoyment, performance} each 1-5
 };
 const DEFAULT_WORKOUT_DATA = {
   sessions: [], // {id, date, exercise, sets:[{reps, weight}], day}
@@ -173,6 +174,47 @@ function PlateBar({ label, value, target, unit, color, dimColor }) {
 }
 
 // ---------- Macros Tab ----------
+function ScaleFive({ label, value, onChange, lowLabel, highLabel }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <h3 style={{ fontFamily: "Inter", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.chalkDim, margin: "0 0 6px" }}>
+        {label}
+      </h3>
+      <div style={{ display: "flex", gap: 4 }}>
+        {[1, 2, 3, 4, 5].map((n) => {
+          const active = value === n;
+          return (
+            <button
+              key={n}
+              onClick={() => onChange(n)}
+              style={{
+                flex: 1,
+                height: 28,
+                borderRadius: 5,
+                border: `1px solid ${active ? COLORS.chalkBlue : COLORS.line}`,
+                background: active ? COLORS.chalkBlue : COLORS.bg,
+                color: active ? COLORS.bg : COLORS.chalkDim,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+      {(lowLabel || highLabel) && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+          <span style={{ fontFamily: "Inter", fontSize: 9, color: COLORS.iron }}>{lowLabel}</span>
+          <span style={{ fontFamily: "Inter", fontSize: 9, color: COLORS.iron }}>{highLabel}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MacrosTab({ macroData, setMacroData }) {
   const weekDates = useMemo(() => getWeekDates(), []);
   const [date, setDate] = useState(() => {
@@ -183,6 +225,8 @@ function MacrosTab({ macroData, setMacroData }) {
   const [targetForm, setTargetForm] = useState(macroData.targets);
 
   const ratings = macroData.ratings || {};
+  const wellness = macroData.wellness || {};
+  const dayWellness = wellness[date] || {};
   const rawEntry = macroData.logs[date];
   const entryObj = rawEntry && !Array.isArray(rawEntry) ? rawEntry : {};
 
@@ -211,6 +255,10 @@ function MacrosTab({ macroData, setMacroData }) {
 
   function setRating(value) {
     setMacroData({ ...macroData, ratings: { ...ratings, [date]: value } });
+  }
+
+  function setWellnessField(field, value) {
+    setMacroData({ ...macroData, wellness: { ...wellness, [date]: { ...dayWellness, [field]: value } } });
   }
 
   const isToday = date === todayStr();
@@ -329,6 +377,15 @@ function MacrosTab({ macroData, setMacroData }) {
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
           <span style={{ fontFamily: "Inter", fontSize: 10, color: COLORS.iron }}>Rough</span>
           <span style={{ fontFamily: "Inter", fontSize: 10, color: COLORS.iron }}>On fire</span>
+        </div>
+      </div>
+
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 16, marginTop: 16 }}>
+        <ScaleFive label="Muscle fatigue" value={dayWellness.fatigue} onChange={(v) => setWellnessField("fatigue", v)} lowLabel="Fresh" highLabel="Wrecked" />
+        <ScaleFive label="Tiredness levels" value={dayWellness.tiredness} onChange={(v) => setWellnessField("tiredness", v)} lowLabel="Wide awake" highLabel="Exhausted" />
+        <ScaleFive label="Session enjoyment" value={dayWellness.enjoyment} onChange={(v) => setWellnessField("enjoyment", v)} lowLabel="Dreaded it" highLabel="Loved it" />
+        <div style={{ marginBottom: 0 }}>
+          <ScaleFive label="Performance levels" value={dayWellness.performance} onChange={(v) => setWellnessField("performance", v)} lowLabel="Off day" highLabel="Best ever" />
         </div>
       </div>
 
