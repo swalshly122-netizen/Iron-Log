@@ -8,18 +8,18 @@ import autoTable from "jspdf-autotable";
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');`;
 
 const COLORS = {
-  bg: "#1C1B18",
-  surface: "#25231F",
-  surfaceRaised: "#2E2B26",
-  line: "#3A362F",
-  chalk: "#F2EFE7",
-  chalkDim: "#B8B2A4",
-  iron: "#8A8577",
-  plate: "#C0392B",
-  plateDim: "#5A2A25",
-  chalkBlue: "#5B8FA3",
-  chalkBlueDim: "#2C4550",
-  gold: "#D4A64A",
+  bg: "#0D1B2A",
+  surface: "#142A3F",
+  surfaceRaised: "#1B3752",
+  line: "#2A4A66",
+  chalk: "#F5F7FA",
+  chalkDim: "#A9BBCB",
+  iron: "#6B8299",
+  plate: "#2C6CA4",
+  plateDim: "#1B3A54",
+  chalkBlue: "#4FA3C4",
+  chalkBlueDim: "#1B3F52",
+  gold: "#5B9BD5",
 };
 
 function todayStr() {
@@ -342,7 +342,7 @@ function MacrosTab({ macroData, setMacroData }) {
 
         <PlateBar label="Protein" value={protein} target={macroData.targets.protein} unit="g" color={COLORS.plate} dimColor={COLORS.plateDim} />
         <PlateBar label="Carbs" value={carbs} target={macroData.targets.carbs} unit="g" color={COLORS.chalkBlue} dimColor={COLORS.chalkBlueDim} />
-        <PlateBar label="Fat" value={fat} target={macroData.targets.fat} unit="g" color={COLORS.gold} dimColor="#4A3C22" />
+        <PlateBar label="Fat" value={fat} target={macroData.targets.fat} unit="g" color={COLORS.gold} dimColor="#1B3F52" />
       </div>
 
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 10, padding: 16 }}>
@@ -945,7 +945,7 @@ function ReviewTab({ macroData, workoutData }) {
             </div>
             <PlateBar label="Protein" value={avg("protein")} target={macroData.targets.protein} unit="g" color={COLORS.plate} dimColor={COLORS.plateDim} />
             <PlateBar label="Carbs" value={avg("carbs")} target={macroData.targets.carbs} unit="g" color={COLORS.chalkBlue} dimColor={COLORS.chalkBlueDim} />
-            <PlateBar label="Fat" value={avg("fat")} target={macroData.targets.fat} unit="g" color={COLORS.gold} dimColor="#4A3C22" />
+            <PlateBar label="Fat" value={avg("fat")} target={macroData.targets.fat} unit="g" color={COLORS.gold} dimColor="#1B3F52" />
           </>
         )}
         {avgRating && (
@@ -1001,7 +1001,7 @@ function generateWeeklyReportPdf({ clientName, weekDates, macroData, workoutData
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text("IRON LOG — Weekly Report", 14, y);
+  doc.text("SW FITNESS — Weekly Report", 14, y);
   y += 9;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
@@ -1025,7 +1025,7 @@ function generateWeeklyReportPdf({ clientName, weekDates, macroData, workoutData
       head: [["Exercise", "1RM (kg)", "2RM (kg)", "3RM (kg)"]],
       body: profileData.benchmarks.map((b) => [b.exercise, b.oneRM, b.twoRM, b.threeRM ?? 0]),
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [192, 57, 43] },
+      headStyles: { fillColor: [44, 108, 164] },
       margin: { left: 14, right: 14 },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -1049,7 +1049,7 @@ function generateWeeklyReportPdf({ clientName, weekDates, macroData, workoutData
     head: [["Day", "kcal", "Protein", "Carbs", "Fat", "Rating"]],
     body: macroRows,
     styles: { fontSize: 9 },
-    headStyles: { fillColor: [192, 57, 43] },
+    headStyles: { fillColor: [44, 108, 164] },
     margin: { left: 14, right: 14 },
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -1077,7 +1077,7 @@ function generateWeeklyReportPdf({ clientName, weekDates, macroData, workoutData
       head: [["Day", "Programme", "Exercise", "Sets"]],
       body: workoutRows,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [192, 57, 43] },
+      headStyles: { fillColor: [44, 108, 164] },
       margin: { left: 14, right: 14 },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -1779,9 +1779,15 @@ function AuthScreen({ onAuthed }) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <Dumbbell size={30} color={COLORS.plate} style={{ marginBottom: 8 }} />
+          <svg width="70" height="30" viewBox="0 0 138 60" style={{ marginBottom: 10 }}>
+            <rect x="0" y="0" width="18" height="60" rx="4" fill={COLORS.plate} />
+            <rect x="24" y="10" width="14" height="40" rx="3" fill={COLORS.plate} />
+            <rect x="12" y="23" width="110" height="14" rx="7" fill={COLORS.chalk} />
+            <rect x="96" y="10" width="14" height="40" rx="3" fill={COLORS.plate} />
+            <rect x="120" y="0" width="18" height="60" rx="4" fill={COLORS.plate} />
+          </svg>
           <h1 style={{ fontFamily: "'Bebas Neue'", fontSize: 34, letterSpacing: 1, color: COLORS.chalk, margin: 0 }}>
-            IRON LOG
+            SW FITNESS
           </h1>
           <p style={{ fontFamily: "Inter", fontSize: 13, color: COLORS.iron, margin: "4px 0 0" }}>
             {mode === "login" ? "Log in to see your own macros, workouts, and progress." : "Create an account to get started."}
