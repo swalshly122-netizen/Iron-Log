@@ -8,13 +8,13 @@ import autoTable from "jspdf-autotable";
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');`;
 
 const COLORS = {
-  bg: "#0D1B2A",
-  surface: "#142A3F",
-  surfaceRaised: "#1B3752",
-  line: "#2A4A66",
+  bg: "#121316",
+  surface: "#1B1C20",
+  surfaceRaised: "#232429",
+  line: "#33353B",
   chalk: "#F5F7FA",
-  chalkDim: "#A9BBCB",
-  iron: "#6B8299",
+  chalkDim: "#A9AEB8",
+  iron: "#6E7280",
   plate: "#2C6CA4",
   plateDim: "#1B3A54",
   chalkBlue: "#4FA3C4",
