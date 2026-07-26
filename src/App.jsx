@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus, MessageSquare, Search, Send, Users, Ruler, Scale, Trophy } from "lucide-react";
+import { Plus, Trash2, Flame, Dumbbell, TrendingUp, X, Loader2, ChevronLeft, ChevronRight, Calendar, User, LogOut, Delete, ArrowLeft, Minus, MessageSquare, Search, Send, Users, Ruler, Scale, Trophy, Download } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "./supabaseClient";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');`;
 
@@ -422,7 +424,7 @@ function DayPlanBox({ plan, onChange, onLogExercise }) {
   );
 }
 
-function Stepper({ label, value, onChange, step, min = 0 }) {
+function Stepper({ label, value, onChange, step, min = 0, max }) {
   return (
     <div style={{ flex: 1 }}>
       <div style={{ fontFamily: "Inter", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.iron, marginBottom: 6, textAlign: "center" }}>
@@ -439,7 +441,7 @@ function Stepper({ label, value, onChange, step, min = 0 }) {
           {value}
         </div>
         <button
-          onClick={() => onChange(Math.round((value + step) * 100) / 100)}
+          onClick={() => onChange(Math.round((max !== undefined ? Math.min(max, value + step) : value + step) * 100) / 100)}
           style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.line}`, background: COLORS.plateDim, color: COLORS.chalk, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
         >
           <Plus size={14} />
@@ -452,7 +454,7 @@ function Stepper({ label, value, onChange, step, min = 0 }) {
 function WorkoutsTab({ workoutData, setWorkoutData }) {
   const [showLog, setShowLog] = useState(false);
   const [exercise, setExercise] = useState("");
-  const [sets, setSets] = useState([{ reps: 5, weight: 0 }]);
+  const [sets, setSets] = useState([{ reps: 5, weight: 0, rpe: 7 }]);
   const [logDay, setLogDay] = useState("");
 
   const dayPlans = workoutData.dayPlans || DEFAULT_WORKOUT_DATA.dayPlans;
@@ -467,7 +469,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
   function openLogModal(plan, exerciseName) {
     setLogDay(plan ? plan.id : "");
     setExercise(exerciseName || "");
-    setSets([{ reps: 5, weight: 0 }]);
+    setSets([{ reps: 5, weight: 0, rpe: 7 }]);
     setShowLog(true);
   }
 
@@ -483,8 +485,8 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
   }, [workoutData.sessions]);
 
   function addSetRow() {
-    const last = sets[sets.length - 1] || { reps: 5, weight: 0 };
-    setSets([...sets, { reps: last.reps, weight: last.weight }]);
+    const last = sets[sets.length - 1] || { reps: 5, weight: 0, rpe: 7 };
+    setSets([...sets, { reps: last.reps, weight: last.weight, rpe: last.rpe }]);
   }
   function updateSet(i, field, value) {
     const next = [...sets];
@@ -497,7 +499,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
 
   function saveSession() {
     if (!exercise.trim()) return;
-    const cleanSets = sets.map((s) => ({ reps: s.reps, weight: s.weight }));
+    const cleanSets = sets.map((s) => ({ reps: s.reps, weight: s.weight, rpe: s.rpe }));
     if (cleanSets.length === 0) return;
     const plan = dayPlans.find((p) => p.id === logDay);
     const session = { id: Date.now().toString(), date: todayStr(), exercise: exercise.trim(), sets: cleanSets, day: plan ? plan.label : null };
@@ -509,7 +511,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
       exerciseNames: Array.from(names),
     });
     setExercise("");
-    setSets([{ reps: 5, weight: 0 }]);
+    setSets([{ reps: 5, weight: 0, rpe: 7 }]);
     setLogDay("");
     setShowLog(false);
   }
@@ -637,7 +639,7 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {s.sets.map((set, i) => (
                   <span key={i} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: COLORS.chalkDim, background: COLORS.surfaceRaised, borderRadius: 4, padding: "2px 8px" }}>
-                    {set.reps}×{set.weight}kg
+                    {set.reps}×{set.weight}kg{set.rpe ? ` @${set.rpe}` : ""}
                   </span>
                 ))}
               </div>
@@ -679,9 +681,10 @@ function WorkoutsTab({ workoutData, setWorkoutData }) {
                   </button>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ display: "flex", gap: 10 }}>
                 <Stepper label="Reps" value={s.reps} onChange={(v) => updateSet(i, "reps", v)} step={1} />
                 <Stepper label="Weight (kg)" value={s.weight} onChange={(v) => updateSet(i, "weight", v)} step={2.5} />
+                <Stepper label="RPE" value={s.rpe} onChange={(v) => updateSet(i, "rpe", v)} step={1} min={1} max={10} />
               </div>
             </div>
           ))}
@@ -933,8 +936,132 @@ function ReviewTab({ macroData, workoutData }) {
 }
 
 // ---------- Coaching Tab ----------
+// ---------- Weekly PDF report ----------
+function generateWeeklyReportPdf({ clientName, weekDates, macroData, workoutData, profileData, comment }) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("IRON LOG — Weekly Report", 14, y);
+  y += 9;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.text(`${clientName}  ·  ${weekRangeLabel(weekDates[0])}`, 14, y);
+  y += 10;
+
+  // Profile
+  const currentWeight = profileData.weightLog[profileData.weightLog.length - 1]?.weight;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Profile", 14, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Height: ${profileData.height || "–"} cm     Weight: ${currentWeight ?? "–"} kg`, 14, y);
+  y += 6;
+
+  if (profileData.benchmarks.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [["Exercise", "1RM (kg)", "2RM (kg)", "3RM (kg)"]],
+      body: profileData.benchmarks.map((b) => [b.exercise, b.oneRM, b.twoRM, b.threeRM ?? 0]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [192, 57, 43] },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  } else {
+    y += 6;
+  }
+
+  // Macros
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Macros", 14, y);
+  y += 4;
+  const macroRows = weekDates.map((d) => {
+    const m = dayMacros(macroData.logs, d);
+    const calories = Math.round(m.protein * 4 + m.carbs * 4 + m.fat * 9);
+    const rating = (macroData.ratings || {})[d];
+    return [fmtDateLabel(d), calories || "–", m.protein || "–", m.carbs || "–", m.fat || "–", rating || "–"];
+  });
+  autoTable(doc, {
+    startY: y + 2,
+    head: [["Day", "kcal", "Protein", "Carbs", "Fat", "Rating"]],
+    body: macroRows,
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [192, 57, 43] },
+    margin: { left: 14, right: 14 },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Workouts
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Workouts", 14, y);
+  y += 4;
+  const weekSessions = workoutData.sessions.filter((s) => weekDates.includes(s.date));
+  if (weekSessions.length === 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("No sessions logged this week.", 14, y + 6);
+    y += 12;
+  } else {
+    const workoutRows = weekSessions.map((s) => [
+      fmtDateLabel(s.date),
+      s.day || "–",
+      s.exercise,
+      s.sets.map((set) => `${set.reps}×${set.weight}kg${set.rpe ? ` @${set.rpe}` : ""}`).join(", "),
+    ]);
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Day", "Programme", "Exercise", "Sets"]],
+      body: workoutRows,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [192, 57, 43] },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  // Coach's comment
+  if (y > 250) { doc.addPage(); y = 20; }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Coach's comment", 14, y);
+  y += 7;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  const commentLines = doc.splitTextToSize(comment || "No comment left this week.", pageWidth - 28);
+  doc.text(commentLines, 14, y);
+
+  doc.save(`${clientName.replace(/\s+/g, "-")}-week-${weekDates[0]}.pdf`);
+}
+
 function CoachTab({ userId }) {
   const thisWeek = useMemo(() => getWeekDates()[0], []);
+  const weekDates = useMemo(() => getWeekDates(), []);
+  const [exporting, setExporting] = useState(false);
+
+  async function exportClientReport() {
+    if (!selectedClient) return;
+    setExporting(true);
+    const [clientMacroData, clientWorkoutData] = await Promise.all([
+      loadKeyForUser(selectedClient.id, "macro-data", DEFAULT_MACRO_DATA),
+      loadKeyForUser(selectedClient.id, "workout-data", DEFAULT_WORKOUT_DATA),
+    ]);
+    generateWeeklyReportPdf({
+      clientName: selectedClient.display_name,
+      weekDates,
+      macroData: clientMacroData,
+      workoutData: clientWorkoutData,
+      profileData: clientProfile,
+      comment: draft,
+    });
+    setExporting(false);
+  }
 
   const [myComments, setMyComments] = useState([]);
   const [myCommentsLoaded, setMyCommentsLoaded] = useState(false);
@@ -1160,8 +1287,17 @@ function CoachTab({ userId }) {
               <ChevronLeft size={14} /> All clients
             </button>
 
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 0.5, color: COLORS.chalk, marginBottom: 4 }}>
-              {selectedClient.display_name.toUpperCase()}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 0.5, color: COLORS.chalk }}>
+                {selectedClient.display_name.toUpperCase()}
+              </div>
+              <button
+                onClick={exportClientReport}
+                disabled={exporting}
+                style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.surfaceRaised, border: `1px solid ${COLORS.line}`, borderRadius: 6, padding: "6px 10px", color: COLORS.chalkDim, fontFamily: "Inter", fontSize: 11, fontWeight: 600, cursor: exporting ? "default" : "pointer", opacity: exporting ? 0.6 : 1 }}
+              >
+                <Download size={12} /> {exporting ? "Building…" : "Export PDF"}
+              </button>
             </div>
 
             <div style={{ marginBottom: 20 }}>
